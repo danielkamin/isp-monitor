@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="pl" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISP Monitor — Architektura</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root, [data-theme="light"] {
+  --color-bg: #f4f3ef;
+  --color-surface: #f9f8f5;
+  --color-surface-2: #ffffff;
+  --color-surface-offset: #eceae5;
+  --color-border: oklch(0.3 0.01 80 / 0.12);
+  --color-text: #1a1a17;
+  --color-text-muted: #6b6a65;
+  --color-text-faint: #b0afa9;
+  --color-primary: #01696f;
+  --color-primary-bg: #e0efee;
+  --color-success: #2d6e18;
+  --color-success-bg: #dff0d5;
+  --color-warning: #964219;
+  --color-warning-bg: #fdeede;
+  --color-error: #8b1a3a;
+  --color-error-bg: #fce8ef;
+  --color-blue: #005f8e;
+  --color-blue-bg: #dceef8;
+  --color-purple: #6a30b0;
+  --color-purple-bg: #ede4f8;
+  --color-orange: #b35900;
+  --color-orange-bg: #fdecd8;
+  --shadow-sm: 0 1px 3px oklch(0.2 0.01 80 / 0.07);
+  --shadow-md: 0 4px 14px oklch(0.2 0.01 80 / 0.09);
+  --shadow-lg: 0 12px 36px oklch(0.2 0.01 80 / 0.13);
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem;
+  --space-12: 3rem; --space-16: 4rem;
+  --text-xs: clamp(0.7rem, 0.65rem + 0.2vw, 0.8rem);
+  --text-sm: clamp(0.8rem, 0.75rem + 0.2vw, 0.9rem);
+  --text-base: clamp(0.9rem, 0.85rem + 0.2vw, 1rem);
+  --text-lg: clamp(1rem, 0.9rem + 0.4vw, 1.2rem);
+  --text-xl: clamp(1.2rem, 1rem + 0.8vw, 1.6rem);
+  --text-2xl: clamp(1.5rem, 1.2rem + 1vw, 2rem);
+  --transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-theme="dark"] {
+  --color-bg: #111110;
+  --color-surface: #171615;
+  --color-surface-2: #1d1c1a;
+  --color-surface-offset: #222120;
+  --color-border: oklch(1 0 0 / 0.08);
+  --color-text: #d4d3d0;
+  --color-text-muted: #7a7975;
+  --color-text-faint: #4a4947;
+  --color-primary: #4fa8b0;
+  --color-primary-bg: #1a3135;
+  --color-success: #5fa83a;
+  --color-success-bg: #1a2f10;
+  --color-warning: #d07c3a;
+  --color-warning-bg: #2e1e0a;
+  --color-error: #d06080;
+  --color-error-bg: #2e0f1a;
+  --color-blue: #4e90c5;
+  --color-blue-bg: #0e2030;
+  --color-purple: #a070e0;
+  --color-purple-bg: #20153a;
+  --color-orange: #e09040;
+  --color-orange-bg: #2a1a08;
+  --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.25);
+  --shadow-md: 0 4px 14px oklch(0 0 0 / 0.35);
+  --shadow-lg: 0 12px 36px oklch(0 0 0 / 0.45);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font-body); font-size: var(--text-base); color: var(--color-text); background: var(--color-bg); min-height: 100dvh; line-height: 1.6; }
+
+/* ── LAYOUT ── */
+.page { max-width: 1280px; margin-inline: auto; padding: var(--space-8) var(--space-6); }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-10); }
+.logo { display: flex; align-items: center; gap: var(--space-3); }
+.logo-mark { width: 36px; height: 36px; }
+.logo-text { font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.02em; }
+.logo-sub { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: -2px; }
+.theme-btn { width: 36px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; color: var(--color-text-muted); cursor: pointer; transition: all var(--transition); background: var(--color-surface); }
+.theme-btn:hover { color: var(--color-text); background: var(--color-surface-offset); }
+
+/* ── TABS ── */
+.tabs { display: flex; gap: var(--space-1); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-1); margin-bottom: var(--space-8); width: fit-content; }
+.tab { padding: var(--space-2) var(--space-5); border-radius: calc(var(--radius-lg) - 2px); font-size: var(--text-sm); font-weight: 500; cursor: pointer; transition: all var(--transition); color: var(--color-text-muted); border: none; background: none; }
+.tab.active { background: var(--color-surface-2); color: var(--color-text); box-shadow: var(--shadow-sm); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── SECTION TITLE ── */
+.section-title { font-size: var(--text-xl); font-weight: 700; letter-spacing: -0.02em; margin-bottom: var(--space-2); }
+.section-desc { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-8); max-width: 72ch; }
+
+/* ── BADGE ── */
+.badge { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-2); border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 600; font-family: var(--font-mono); letter-spacing: 0.02em; }
+.badge-primary { background: var(--color-primary-bg); color: var(--color-primary); }
+.badge-success { background: var(--color-success-bg); color: var(--color-success); }
+.badge-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.badge-error { background: var(--color-error-bg); color: var(--color-error); }
+.badge-blue { background: var(--color-blue-bg); color: var(--color-blue); }
+.badge-purple { background: var(--color-purple-bg); color: var(--color-purple); }
+.badge-orange { background: var(--color-orange-bg); color: var(--color-orange); }
+
+/* ── DIAGRAM CANVAS ── */
+.diagram-wrap { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-8); overflow-x: auto; box-shadow: var(--shadow-md); margin-bottom: var(--space-8); }
+.diagram { min-width: 860px; }
+
+/* ── NODES ── */
+.node { border-radius: var(--radius-lg); border: 1px solid var(--color-border); padding: var(--space-4) var(--space-5); box-shadow: var(--shadow-sm); transition: box-shadow var(--transition), transform var(--transition); cursor: default; }
+.node:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.node-title { font-size: var(--text-sm); font-weight: 700; letter-spacing: -0.01em; margin-bottom: var(--space-1); }
+.node-sub { font-size: var(--text-xs); color: var(--color-text-muted); font-family: var(--font-mono); line-height: 1.4; }
+.node-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-3); }
+
+.node-center { background: color-mix(in oklch, var(--color-primary) 10%, var(--color-surface-2)); border-color: color-mix(in oklch, var(--color-primary) 35%, transparent); }
+.node-probe { background: color-mix(in oklch, var(--color-blue) 10%, var(--color-surface-2)); border-color: color-mix(in oklch, var(--color-blue) 35%, transparent); }
+.node-storage { background: color-mix(in oklch, var(--color-success) 10%, var(--color-surface-2)); border-color: color-mix(in oklch, var(--color-success) 35%, transparent); }
+.node-analytics { background: color-mix(in oklch, var(--color-purple) 10%, var(--color-surface-2)); border-color: color-mix(in oklch, var(--color-purple) 35%, transparent); }
+.node-api { background: color-mix(in oklch, var(--color-orange) 10%, var(--color-surface-2)); border-color: color-mix(in oklch, var(--color-orange) 35%, transparent); }
+.node-agent { background: color-mix(in oklch, var(--color-warning) 10%, var(--color-surface-2)); border-color: color-mix(in oklch, var(--color-warning) 35%, transparent); }
+.node-db { background: var(--color-surface-offset); border-style: dashed; }
+.node-site { background: var(--color-surface-offset); }
+.node-site-a { background: color-mix(in oklch, var(--color-error) 8%, var(--color-surface-offset)); border-color: color-mix(in oklch, var(--color-error) 30%, transparent); }
+.node-ref { background: var(--color-surface-offset); border-style: dashed; opacity: 0.7; }
+
+/* ── SVG ARROWS ── */
+.arrows { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+
+/* ── GRID LAYOUT FOR DIAGRAMS ── */
+.diag-grid-a { display: grid; grid-template-columns: 1fr 60px 1fr 60px 1fr 60px 1fr; grid-template-rows: auto auto auto; gap: var(--space-4); align-items: center; }
+.diag-grid-b { display: grid; grid-template-columns: 1fr 60px 1fr 60px 1fr; grid-template-rows: auto auto auto auto auto; gap: var(--space-4); align-items: center; }
+
+/* ── ARROW CELLS ── */
+.arrow-cell { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: var(--space-1); }
+.arrow-h { display: flex; align-items: center; gap: 0; width: 100%; justify-content: center; }
+.arrow-line { flex: 1; height: 2px; background: var(--color-border); }
+.arrow-head { width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 7px solid var(--color-text-faint); }
+.arrow-head-l { width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-right: 7px solid var(--color-text-faint); }
+.arrow-label { font-size: 9px; font-family: var(--font-mono); color: var(--color-text-faint); white-space: nowrap; }
+.arrow-both { display: flex; align-items: center; width: 100%; gap: 0; }
+.arrow-cell-v { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.arrow-v-line { width: 2px; height: 24px; background: var(--color-border); }
+.arrow-v-head { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--color-text-faint); }
+.arrow-v-head-up { border-top: none; border-bottom: 7px solid var(--color-text-faint); }
+
+/* ── SECTION GROUPS ── */
+.zone { border: 1px dashed var(--color-border); border-radius: var(--radius-xl); padding: var(--space-5); position: relative; }
+.zone-label { position: absolute; top: -11px; left: var(--space-4); background: var(--color-bg); padding: 0 var(--space-2); font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); font-family: var(--font-mono); }
+.zone-center { border-color: color-mix(in oklch, var(--color-primary) 40%, transparent); }
+.zone-internet { border-color: color-mix(in oklch, var(--color-blue) 30%, transparent); }
+.zone-site { border-color: color-mix(in oklch, var(--color-warning) 35%, transparent); }
+
+/* ── FLOW STEPS ── */
+.flow-wrap { margin-bottom: var(--space-8); }
+.flow-title { font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-5); letter-spacing: -0.01em; }
+.flow-steps { display: flex; flex-direction: column; gap: 0; }
+.flow-step { display: grid; grid-template-columns: 40px 1fr; gap: var(--space-4); position: relative; }
+.flow-step:not(:last-child) .step-line { position: absolute; left: 19px; top: 36px; bottom: -8px; width: 2px; background: var(--color-border); }
+.step-num { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: var(--text-sm); font-weight: 700; font-family: var(--font-mono); flex-shrink: 0; margin-top: 2px; border: 2px solid; z-index: 1; position: relative; }
+.step-num-primary { background: var(--color-primary-bg); color: var(--color-primary); border-color: color-mix(in oklch, var(--color-primary) 40%, transparent); }
+.step-num-blue { background: var(--color-blue-bg); color: var(--color-blue); border-color: color-mix(in oklch, var(--color-blue) 40%, transparent); }
+.step-num-success { background: var(--color-success-bg); color: var(--color-success); border-color: color-mix(in oklch, var(--color-success) 40%, transparent); }
+.step-num-purple { background: var(--color-purple-bg); color: var(--color-purple); border-color: color-mix(in oklch, var(--color-purple) 40%, transparent); }
+.step-num-warning { background: var(--color-warning-bg); color: var(--color-warning); border-color: color-mix(in oklch, var(--color-warning) 40%, transparent); }
+.step-num-orange { background: var(--color-orange-bg); color: var(--color-orange); border-color: color-mix(in oklch, var(--color-orange) 40%, transparent); }
+.step-body { padding-bottom: var(--space-6); }
+.step-body-title { font-weight: 700; font-size: var(--text-base); margin-bottom: var(--space-1); }
+.step-body-desc { font-size: var(--text-sm); color: var(--color-text-muted); line-height: 1.6; max-width: 65ch; }
+.step-code { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--color-surface-offset); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); margin-top: var(--space-3); color: var(--color-text); line-height: 1.7; white-space: pre; overflow-x: auto; }
+.step-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-3); }
+
+/* ── MIGRATION DIFF ── */
+.diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); margin-bottom: var(--space-8); }
+.diff-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--shadow-sm); }
+.diff-card-title { font-weight: 700; font-size: var(--text-base); margin-bottom: var(--space-4); display: flex; align-items: center; gap: var(--space-2); }
+.diff-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.diff-item { display: flex; gap: var(--space-3); align-items: flex-start; }
+.diff-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; font-size: 10px; }
+.diff-icon-add { background: var(--color-success-bg); color: var(--color-success); }
+.diff-icon-change { background: var(--color-warning-bg); color: var(--color-warning); }
+.diff-icon-keep { background: var(--color-blue-bg); color: var(--color-blue); }
+.diff-text { font-size: var(--text-sm); color: var(--color-text); }
+.diff-text span { color: var(--color-text-muted); }
+.effort-bar { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--shadow-sm); margin-bottom: var(--space-6); }
+.effort-title { font-weight: 700; font-size: var(--text-lg); margin-bottom: var(--space-5); }
+.effort-row { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-5); }
+.effort-row:last-child { margin-bottom: 0; }
+.effort-header { display: flex; justify-content: space-between; align-items: baseline; }
+.effort-label { font-size: var(--text-sm); font-weight: 600; }
+.effort-detail { font-size: var(--text-xs); color: var(--color-text-muted); font-family: var(--font-mono); }
+.effort-track { height: 8px; background: var(--color-surface-offset); border-radius: var(--radius-full); overflow: hidden; }
+.effort-fill { height: 100%; border-radius: var(--radius-full); transition: width 1s cubic-bezier(0.16, 1, 0.3, 1); }
+.fill-easy { background: var(--color-success); }
+.fill-med { background: var(--color-warning); }
+.fill-hard { background: var(--color-error); }
+
+/* ── LEGEND ── */
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-6); }
+.legend-item { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* ── SITE GRID ── */
+.site-group { display: flex; flex-direction: column; gap: var(--space-3); }
+.site-row { display: flex; gap: var(--space-3); align-items: stretch; }
+
+/* ── MISC ── */
+.divider { height: 1px; background: var(--color-border); margin: var(--space-6) 0; }
+.callout { background: var(--color-primary-bg); border: 1px solid color-mix(in oklch, var(--color-primary) 35%, transparent); border-radius: var(--radius-lg); padding: var(--space-4) var(--space-5); font-size: var(--text-sm); line-height: 1.6; margin-bottom: var(--space-6); }
+.callout strong { color: var(--color-primary); }
+.callout-warn { background: var(--color-warning-bg); border-color: color-mix(in oklch, var(--color-warning) 35%, transparent); }
+.callout-warn strong { color: var(--color-warning); }
+
+@media (max-width: 700px) {
+  .diff-grid { grid-template-columns: 1fr; }
+  .page { padding: var(--space-5) var(--space-4); }
+  .tabs { width: 100%; }
+  .tab { flex: 1; text-align: center; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 36 36" fill="none" aria-label="ISP Monitor logo">
+        <rect width="36" height="36" rx="9" fill="currentColor" fill-opacity="0.08"/>
+        <path d="M6 18 Q10 8 18 8 Q26 8 30 18 Q26 28 18 28 Q10 28 6 18Z" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.3"/>
+        <circle cx="18" cy="18" r="3.5" fill="currentColor"/>
+        <path d="M18 18 L28 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="28" cy="10" r="2" fill="currentColor" opacity="0.6"/>
+        <path d="M18 18 L8 26" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+        <circle cx="8" cy="26" r="2" fill="currentColor" opacity="0.4"/>
+        <path d="M18 18 L22 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="22" cy="9" r="1.5" fill="currentColor" opacity="0.5"/>
+      </svg>
+      <div>
+        <div class="logo-text">ISP Monitor</div>
+        <div class="logo-sub">Architektura systemu</div>
+      </div>
+    </div>
+    <button class="theme-btn" data-theme-toggle aria-label="Przełącz motyw">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs" role="tablist">
+    <button class="tab active" role="tab" onclick="switchTab('wariant-a', this)">Wariant A — bez agenta</button>
+    <button class="tab" role="tab" onclick="switchTab('wariant-b', this)">Wariant B — z agentem</button>
+    <button class="tab" role="tab" onclick="switchTab('migracja', this)">Migracja A → B</button>
+  </div>
+
+  <!-- ═══════════════════════════════ WARIANT A ═══════════════════════════════ -->
+  <div id="wariant-a" class="tab-panel active">
+    <h2 class="section-title">Wariant A — centrum odpytuje obiekty</h2>
+    <p class="section-desc">Wszystkie pomiary wykonuje centrum zarządzania. Zero instalacji na obiektach. Idealny punkt startowy — uruchamiasz w jeden dzień.</p>
+
+    <div class="callout">
+      <strong>Kiedy to wystarcza:</strong> Gdy obiekty mają otwarte porty (kamera na 554, alarm na 80/443) lub odpowiadają na ICMP. Pokrywa 80% przypadków bez żadnego deploymentu na miejscu.
+    </div>
+
+    <!-- DIAGRAM A -->
+    <div class="diagram-wrap">
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--color-blue)"></div> Probe Service</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--color-success)"></div> Storage Service</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--color-purple)"></div> Analytics Service</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--color-orange)"></div> API / Dashboard</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--color-text-faint)"></div> PostgreSQL</div>
+      </div>
+
+      <!-- CENTRUM -->
+      <div class="zone zone-center" style="margin-bottom:var(--space-5)">
+        <span class="zone-label">🖥️ CENTRUM ZARZĄDZANIA (Twoja lokalizacja)</span>
+        <div style="display:grid; grid-template-columns:1fr 56px 1fr 56px 1fr 56px 1fr; gap:var(--space-3); align-items:center; margin-bottom: var(--space-4)">
+
+          <!-- Probe Service -->
+          <div class="node node-probe">
+            <div class="node-title">Probe Service</div>
+            <div class="node-sub">goroutine per obiekt<br>configurowalny interwał</div>
+            <div class="node-tags">
+              <span class="badge badge-blue">ping/ICMP</span>
+              <span class="badge badge-blue">TCP connect</span>
+              <span class="badge badge-blue">traceroute*</span>
+            </div>
+          </div>
+
+          <!-- arrow -->
+          <div class="arrow-cell">
+            <div class="arrow-h"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+            <div class="arrow-label">gRPC stream</div>
+          </div>
+
+          <!-- Storage Service -->
+          <div class="node node-storage">
+            <div class="node-title">Storage Service</div>
+            <div class="node-sub">przyjmuje wyniki<br>bulk insert + transakcje</div>
+            <div class="node-tags">
+              <span class="badge badge-success">sqlc</span>
+              <span class="badge badge-success">pgxpool</span>
+            </div>
+          </div>
+
+          <!-- arrow -->
+          <div class="arrow-cell">
+            <div class="arrow-h"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+            <div class="arrow-label">gRPC / events</div>
+          </div>
+
+          <!-- Analytics Service -->
+          <div class="node node-analytics">
+            <div class="node-title">Analytics Service</div>
+            <div class="node-sub">agregaty, incydenty<br>worker pool</div>
+            <div class="node-tags">
+              <span class="badge badge-purple">errgroup</span>
+              <span class="badge badge-purple">anomalie</span>
+            </div>
+          </div>
+
+          <!-- arrow -->
+          <div class="arrow-cell">
+            <div class="arrow-h"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+            <div class="arrow-label">REST/gRPC</div>
+          </div>
+
+          <!-- API Service -->
+          <div class="node node-api">
+            <div class="node-title">API Service</div>
+            <div class="node-sub">REST + WebSocket<br>dashboard, raporty</div>
+            <div class="node-tags">
+              <span class="badge badge-orange">HTTP/WS</span>
+              <span class="badge badge-orange">CSV export</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DB row -->
+        <div style="display:grid; grid-template-columns:1fr 56px 1fr 56px 1fr; gap:var(--space-3); align-items:center">
+          <div class="arrow-cell">
+            <div class="arrow-cell-v">
+              <div class="arrow-v-line"></div>
+              <div class="arrow-v-head"></div>
+            </div>
+          </div>
+          <div></div>
+          <div class="arrow-cell">
+            <div class="arrow-cell-v"><div class="arrow-v-line"></div><div class="arrow-v-head"></div></div>
+          </div>
+          <div></div>
+          <div class="arrow-cell">
+            <div class="arrow-cell-v"><div class="arrow-v-line"></div><div class="arrow-v-head"></div></div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 56px 1fr 56px 1fr; gap:var(--space-3); align-items:center">
+          <div class="node node-db">
+            <div class="node-title" style="font-family:var(--font-mono); font-size:var(--text-xs)">📦 PostgreSQL</div>
+            <div class="node-sub">probes, sites, incidents<br>partycjonowanie po ts</div>
+          </div>
+          <div></div>
+          <div class="node node-db">
+            <div class="node-title" style="font-family:var(--font-mono); font-size:var(--text-xs)">📦 PostgreSQL</div>
+            <div class="node-sub">aggregates, isp_stats<br>materialized views</div>
+          </div>
+          <div></div>
+          <div class="node node-db">
+            <div class="node-title" style="font-family:var(--font-mono); font-size:var(--text-xs)">📦 PostgreSQL</div>
+            <div class="node-sub">widoki raportowe<br>lub shared read-replica</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INTERNET + SITES -->
+      <div style="display:grid; grid-template-columns: 60px 1fr; gap:var(--space-4); align-items:center">
+        <div class="arrow-cell" style="flex-direction:column; gap:var(--space-1)">
+          <div class="arrow-cell-v" style="flex-direction:column-reverse">
+            <div class="arrow-v-line" style="height:40px"></div>
+            <div class="arrow-v-head arrow-v-head-up"></div>
+          </div>
+          <div class="arrow-label" style="writing-mode:horizontal-tb; text-align:center">probe<br>←</div>
+          <div class="arrow-cell-v">
+            <div class="arrow-v-line" style="height:40px"></div>
+            <div class="arrow-v-head"></div>
+          </div>
+        </div>
+        <div class="zone zone-internet">
+          <span class="zone-label">🌐 INTERNET — ISP trasy</span>
+          <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:var(--space-3)">
+            <div class="node node-site-a">
+              <div class="node-title">Obiekt A</div>
+              <div class="node-sub">1.2.3.4:554<br>ISP: Orange</div>
+              <div class="node-tags"><span class="badge badge-error">kamera RTSP</span></div>
+            </div>
+            <div class="node node-site">
+              <div class="node-title">Obiekt B</div>
+              <div class="node-sub">5.6.7.8:443<br>ISP: T-Mobile</div>
+              <div class="node-tags"><span class="badge badge-warning">alarm HTTP</span></div>
+            </div>
+            <div class="node node-site">
+              <div class="node-title">Obiekt C</div>
+              <div class="node-sub">9.10.11.12:80<br>ISP: Orange</div>
+              <div class="node-tags"><span class="badge badge-warning">kamera HTTP</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:var(--text-xs); color:var(--color-text-faint); margin-top:var(--space-3); font-family:var(--font-mono)">* traceroute uruchamiany tylko przy wykryciu degradacji (packet loss &gt; 5% lub RTT &gt; 2× baseline)</div>
+    </div>
+
+    <!-- FLOW A -->
+    <div class="flow-wrap">
+      <div class="flow-title">Flow danych — Wariant A</div>
+      <div class="flow-steps">
+
+        <div class="flow-step">
+          <div class="step-line"></div>
+          <div class="step-num step-num-blue">1</div>
+          <div class="step-body">
+            <div class="step-body-title">Probe Service — goroutine scheduler</div>
+            <div class="step-body-desc">Co 30s dla każdego obiektu uruchamiana goroutine wykonuje serię 5 pingów ICMP + TCP connect na zarejestrowany port. Worker pool ogranicza równoległość.</div>
+            <div class="step-code">// Worker pool — max 20 równoległych probe
+sem := semaphore.NewWeighted(20)
+for _, site := range sites {
+    go func(s Site) {
+        sem.Acquire(ctx, 1)
+        defer sem.Release(1)
+        result := prober.Probe(ctx, s)
+        resultCh &lt;- result
+    }(site)
+}</div>
+            <div class="step-tags"><span class="badge badge-blue">concurrency</span><span class="badge badge-blue">semaphore</span><span class="badge badge-blue">goroutines</span></div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="step-line"></div>
+          <div class="step-num step-num-success">2</div>
+          <div class="step-body">
+            <div class="step-body-title">Storage Service — bulk insert przez gRPC stream</div>
+            <div class="step-body-desc">Probe Service otwiera długo żyjący gRPC bidirectional stream do Storage. Wyniki są batchwane po 50 rekordów i wstawiane do PostgreSQL w jednej transakcji przez sqlc.</div>
+            <div class="step-code">-- sqlc query
+-- name: InsertProbeBatch :exec
+INSERT INTO probes (site_id, ts, rtt_ms, packet_loss_pct, is_online, hop_count)
+SELECT unnest($1::uuid[]), unnest($2::timestamptz[]),
+       unnest($3::float8[]), unnest($4::float8[]),
+       unnest($5::bool[]),   unnest($6::int[])</div>
+            <div class="step-tags"><span class="badge badge-success">sqlc</span><span class="badge badge-success">gRPC stream</span><span class="badge badge-success">transakcje</span></div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="step-line"></div>
+          <div class="step-num step-num-purple">3</div>
+          <div class="step-body">
+            <div class="step-body-title">Analytics Service — detekcja incydentów</div>
+            <div class="step-body-desc">Subskrybuje eventy ze Storage. Gdy obiekt przechodzi z online→offline otwiera nowy incydent w transakcji. Śledzi baseline latencji per site (rolling average), wykrywa spiki.</div>
+            <div class="step-code">// Detekcja przejścia online → offline
+func (a *Analyzer) onProbeResult(ctx context.Context, r ProbeResult) error {
+    prev := a.cache.Get(r.SiteID) // sync.Map
+    if prev.IsOnline && !r.IsOnline {
+        return a.repo.OpenIncident(ctx, r.SiteID, r.Timestamp)
+    }
+    if !prev.IsOnline && r.IsOnline {
+        return a.repo.CloseIncident(ctx, r.SiteID, r.Timestamp)
+    }
+    return nil
+}</div>
+            <div class="step-tags"><span class="badge badge-purple">sync.Map</span><span class="badge badge-purple">incydenty</span><span class="badge badge-purple">repository pattern</span></div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="step-num step-num-orange">4</div>
+          <div class="step-body">
+            <div class="step-body-title">API Service — dashboard i raporty</div>
+            <div class="step-body-desc">REST API + WebSocket push przy zmianie statusu obiektu. Endpointy do raportów per ISP, per obiekt, eksport CSV.</div>
+            <div class="step-code">GET /api/v1/sites                  # lista obiektów z aktualnym statusem
+GET /api/v1/sites/:id/stats        # statystyki: uptime%, avg_rtt, p95_rtt
+GET /api/v1/isp/:name/report       # zestawienie per ISP
+GET /api/v1/incidents?from=&amp;to=   # lista incydentów z filtrem czasu
+WS  /ws/live                       # push: zmiany statusów real-time</div>
+            <div class="step-tags"><span class="badge badge-orange">REST</span><span class="badge badge-orange">WebSocket</span><span class="badge badge-orange">raporty</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ WARIANT B ═══════════════════════════════ -->
+  <div id="wariant-b" class="tab-panel">
+    <h2 class="section-title">Wariant B — agent na obiekcie</h2>
+    <p class="section-desc">Lekki binary w Go deployowany na RPi Zero 2W lub dowolnym urządzeniu na obiekcie. Daje pełny obraz: co widzi obiekt od środka vs co widzi centrum z zewnątrz.</p>
+
+    <div class="callout">
+      <strong>Kluczowa wartość Wariantu B:</strong> Korelacja dwukierunkowa — gdy centrum nie widzi obiektu, ale agent dalej pinguje 8.8.8.8, problem leży po stronie centrum lub routingu asymetrycznego. Gdy agent też traci internet — to awaria ISP po stronie obiektu.
+    </div>
+
+    <!-- DIAGRAM B -->
+    <div class="diagram-wrap">
+      <div style="display:grid; grid-template-columns:1fr 64px 1fr; gap:var(--space-5); align-items:start">
+
+        <!-- CENTRUM B -->
+        <div class="zone zone-center">
+          <span class="zone-label">🖥️ CENTRUM ZARZĄDZANIA</span>
+          <div style="display:flex; flex-direction:column; gap:var(--space-3)">
+            <div class="node node-probe">
+              <div class="node-title">Probe Service</div>
+              <div class="node-sub">nadal odpytuje z zewnątrz<br>(weryfikacja asymetryczna)</div>
+              <div class="node-tags"><span class="badge badge-blue">outbound probe</span></div>
+            </div>
+            <div class="node node-storage">
+              <div class="node-title">Storage Service</div>
+              <div class="node-sub">przyjmuje dane z obu źródeł<br>taguje source: probe | agent</div>
+              <div class="node-tags"><span class="badge badge-success">source tagging</span><span class="badge badge-success">sqlc</span></div>
+            </div>
+            <div class="node node-analytics">
+              <div class="node-title">Analytics Service</div>
+              <div class="node-sub">korelacja probe↔agent<br>klasyfikacja przyczyny awarii</div>
+              <div class="node-tags"><span class="badge badge-purple">korelacja</span><span class="badge badge-purple">root cause</span></div>
+            </div>
+            <div class="node node-api">
+              <div class="node-title">API + Dashboard</div>
+              <div class="node-sub">widok per obiekt + per ISP<br>porównanie probe vs agent</div>
+              <div class="node-tags"><span class="badge badge-orange">dual-source view</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ARROWS -->
+        <div style="display:flex; flex-direction:column; gap:var(--space-8); align-items:center; padding-top:var(--space-10)">
+          <div class="arrow-cell" style="width:100%">
+            <div style="display:flex; align-items:center; width:100%; justify-content:center; gap:0">
+              <div class="arrow-head-l"></div>
+              <div class="arrow-line"></div>
+              <div class="arrow-head"></div>
+            </div>
+            <div class="arrow-label" style="text-align:center">probe (ICMP/TCP)</div>
+          </div>
+          <div class="arrow-cell" style="width:100%">
+            <div class="arrow-h">
+              <div class="arrow-head-l"></div>
+              <div class="arrow-line"></div>
+              <div class="arrow-head"></div>
+            </div>
+            <div class="arrow-label" style="text-align:center">agent → gRPC/HTTPS<br>keep-alive stream</div>
+          </div>
+          <div class="arrow-cell" style="width:100%">
+            <div class="arrow-h">
+              <div class="arrow-line"></div>
+              <div class="arrow-head"></div>
+            </div>
+            <div class="arrow-label" style="text-align:center">config push<br>(interwały, targety)</div>
+          </div>
+        </div>
+
+        <!-- OBIEKTY B -->
+        <div style="display:flex; flex-direction:column; gap:var(--space-4)">
+
+          <div class="zone zone-site">
+            <span class="zone-label">📍 Obiekt A — ISP: Orange</span>
+            <div class="node node-agent" style="margin-bottom:var(--space-3)">
+              <div class="node-title">Agent (Go binary)</div>
+              <div class="node-sub">RPi Zero 2W / OpenWRT<br>~5MB binary, &lt;15MB RAM</div>
+              <div class="node-tags">
+                <span class="badge badge-warning">ping 8.8.8.8</span>
+                <span class="badge badge-warning">ping centrum</span>
+                <span class="badge badge-warning">gRPC stream out</span>
+              </div>
+            </div>
+            <div class="node node-site" style="opacity:0.7">
+              <div class="node-sub">Kamera / urządzenie<br>docelowe (NAT)</div>
+            </div>
+          </div>
+
+          <div class="zone zone-site">
+            <span class="zone-label">📍 Obiekt B — ISP: T-Mobile</span>
+            <div class="node node-agent" style="margin-bottom:var(--space-3)">
+              <div class="node-title">Agent (Go binary)</div>
+              <div class="node-sub">Ten sam binary — cross-compile<br>GOARCH=arm GOOS=linux</div>
+              <div class="node-tags">
+                <span class="badge badge-warning">ping 8.8.8.8</span>
+                <span class="badge badge-warning">ping centrum</span>
+              </div>
+            </div>
+            <div class="node node-ref">
+              <div class="node-sub">urządzenie lokalne</div>
+            </div>
+          </div>
+
+          <div class="node node-ref" style="text-align:center; opacity:0.5">
+            <div class="node-sub">+ kolejne obiekty...</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- AGENT FLOW -->
+    <div class="flow-wrap">
+      <div class="flow-title">Co robi agent — flow</div>
+      <div class="flow-steps">
+
+        <div class="flow-step">
+          <div class="step-line"></div>
+          <div class="step-num step-num-warning">1</div>
+          <div class="step-body">
+            <div class="step-body-title">Agent boot — połączenie z centrum</div>
+            <div class="step-body-desc">Agent startuje, nawiązuje gRPC keep-alive stream do centrum. Jeśli połączenie pada, exponential backoff + retry. Centrum widzi moment odłączenia agenta jako osobne zdarzenie.</div>
+            <div class="step-code">// Agent — reconnect loop
+for {
+    conn, err := grpc.Dial(centerAddr, grpc.WithBlock())
+    if err != nil { time.Sleep(backoff(attempt)); continue }
+    err = runStream(ctx, conn) // blokuje do utraty conn
+    conn.Close()
+    attempt++
+}</div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="step-line"></div>
+          <div class="step-num step-num-warning">2</div>
+          <div class="step-body">
+            <div class="step-body-title">Lokalne pomiary co 30s</div>
+            <div class="step-body-desc">Agent pinguje: (a) centrum zarządzania, (b) 8.8.8.8, (c) 1.1.1.1. Mierzy RTT i packet loss. Wyniki buforowane lokalnie gdy stream niedostępny.</div>
+            <div class="step-code">targets := []string{
+    "centrum.firma.pl",   // twój serwer
+    "8.8.8.8",            // Google DNS — referencja globalna
+    "1.1.1.1",            // Cloudflare DNS — referencja globalna
+}
+// Wyniki wysyłane strumieniem, jeśli offline → local ring buffer</div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="step-num step-num-success">3</div>
+          <div class="step-body">
+            <div class="step-body-title">Centrum — korelacja i klasyfikacja</div>
+            <div class="step-body-desc">Analytics Service ma teraz dwa sygnały per obiekt. Matryca 2×2 daje root cause klasyfikację awarii.</div>
+            <div class="step-code">Centrum nie widzi | Agent nie widzi DNS → AWARIA ISP (obiekt bez internetu)
+Centrum nie widzi | Agent widzi DNS     → ROUTING ASYMETRYCZNY lub NAT problem
+Centrum widzi     | Agent nie widzi DNS → AWARIA ISP (upstream agenta)  
+Centrum widzi     | Agent widzi DNS     → OK (fałszywy alarm — zatkany port)</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ MIGRACJA ═══════════════════════════════ -->
+  <div id="migracja" class="tab-panel">
+    <h2 class="section-title">Migracja A → B</h2>
+    <p class="section-desc">Przejście jest łatwe — Wariant A jest zaprojektowany tak, żeby B był naturalnym rozszerzeniem. Żaden istniejący serwis nie wymaga przepisania.</p>
+
+    <div class="effort-bar">
+      <div class="effort-title">Szacowany nakład pracy</div>
+      <div class="effort-row">
+        <div class="effort-header">
+          <span class="effort-label">Napisanie agenta Go (nowy serwis)</span>
+          <span class="effort-detail">~2–3 dni · GOARCH=arm cross-compile</span>
+        </div>
+        <div class="effort-track"><div class="effort-fill fill-easy" style="width:35%"></div></div>
+      </div>
+      <div class="effort-row">
+        <div class="effort-header">
+          <span class="effort-label">Rozszerzenie Storage Service</span>
+          <span class="effort-detail">~0.5 dnia · dodanie kolumny source + nowe sqlc query</span>
+        </div>
+        <div class="effort-track"><div class="effort-fill fill-easy" style="width:12%"></div></div>
+      </div>
+      <div class="effort-row">
+        <div class="effort-header">
+          <span class="effort-label">Korelacja w Analytics Service</span>
+          <span class="effort-detail">~1 dzień · matryca 2×2, nowe reguły incydentów</span>
+        </div>
+        <div class="effort-track"><div class="effort-fill fill-med" style="width:25%"></div></div>
+      </div>
+      <div class="effort-row">
+        <div class="effort-header">
+          <span class="effort-label">Rozszerzenie .proto (gRPC)</span>
+          <span class="effort-detail">~2h · nowy AgentService, regeneracja kodu</span>
+        </div>
+        <div class="effort-track"><div class="effort-fill fill-easy" style="width:8%"></div></div>
+      </div>
+      <div class="effort-row">
+        <div class="effort-header">
+          <span class="effort-label">Deploy + hardware na obiekcie</span>
+          <span class="effort-detail">~1 dzień per N obiektów (RPi setup, SSH, autostart)</span>
+        </div>
+        <div class="effort-track"><div class="effort-fill fill-med" style="width:30%"></div></div>
+      </div>
+    </div>
+
+    <div class="diff-grid">
+      <div class="diff-card">
+        <div class="diff-card-title">
+          <span class="badge badge-success">ZOSTAJE bez zmian</span>
+        </div>
+        <div class="diff-list">
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-keep">→</div>
+            <div class="diff-text">Probe Service <span>— działa identycznie, odpytuje z zewnątrz</span></div>
+          </div>
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-keep">→</div>
+            <div class="diff-text">Cały schemat PostgreSQL <span>— tabele probes, sites, incidents bez zmian</span></div>
+          </div>
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-keep">→</div>
+            <div class="diff-text">API Service <span>— endpointy bez zmian, nowe opcjonalne query params</span></div>
+          </div>
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-keep">→</div>
+            <div class="diff-text">Repository interfaces <span>— żadnych zmian w kontraktach</span></div>
+          </div>
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-keep">→</div>
+            <div class="diff-text">Testy jednostkowe <span>— wszystkie nadal przechodzą</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="diff-card">
+        <div class="diff-card-title">
+          <span class="badge badge-warning">ROZSZERZANE (nie przepisywane)</span>
+        </div>
+        <div class="diff-list">
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-add">+</div>
+            <div class="diff-text">Storage Service <span>— nowe pole source VARCHAR w probes, nowe sqlc queries</span></div>
+          </div>
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-add">+</div>
+            <div class="diff-text">Analytics Service <span>— nowy UseCase: korelacja probe↔agent</span></div>
+          </div>
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-add">+</div>
+            <div class="diff-text">collector.proto <span>— nowy AgentService obok ProbeService</span></div>
+          </div>
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-add">+</div>
+            <div class="diff-text">Nowa tabela agent_heartbeats <span>— śledzi kiedy agent był ostatnio połączony</span></div>
+          </div>
+          <div class="diff-item">
+            <div class="diff-icon diff-icon-add">+</div>
+            <div class="diff-text">Nowy serwis: Agent binary <span>— całkowicie nowy, ~500 linii Go</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-warn">
+      <strong>Ważne przy migracji schematu:</strong> Dodanie kolumny <code style="font-family:var(--font-mono); font-size:var(--text-xs)">source</code> do tabeli <code style="font-family:var(--font-mono); font-size:var(--text-xs)">probes</code> to prosta migracja <code style="font-family:var(--font-mono); font-size:var(--text-xs)">ALTER TABLE</code> z wartością domyślną <code style="font-family:var(--font-mono); font-size:var(--text-xs)">'probe'</code> — stare dane nie wymagają żadnej transformacji.
+    </div>
+
+    <!-- MIGRATION FLOW -->
+    <div class="flow-wrap">
+      <div class="flow-title">Kolejność kroków migracji</div>
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="step-line"></div>
+          <div class="step-num step-num-success">1</div>
+          <div class="step-body">
+            <div class="step-body-title">Migracja schematu DB (backward-compatible)</div>
+            <div class="step-body-desc">Dodaj kolumnę z DEFAULT — stary Storage Service nadal działa bez zmian kodu.</div>
+            <div class="step-code">-- golang-migrate: 0003_add_source_column.up.sql
+ALTER TABLE probes ADD COLUMN source VARCHAR(10) NOT NULL DEFAULT 'probe';
+CREATE TABLE agent_heartbeats (
+    site_id UUID REFERENCES sites(id),
+    last_seen_at TIMESTAMPTZ NOT NULL,
+    agent_version TEXT,
+    PRIMARY KEY (site_id)
+);</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="step-line"></div>
+          <div class="step-num step-num-blue">2</div>
+          <div class="step-body">
+            <div class="step-body-title">Rozszerz .proto i wygeneruj kod</div>
+            <div class="step-body-desc">Dodaj AgentService do istniejącego pliku proto. Stare usługi nie są dotknięte.</div>
+            <div class="step-code">// collector.proto — nowy blok, stary ProbeService bez zmian
+service AgentService {
+  rpc ReportMetrics(stream AgentMetric) returns (stream AgentCommand);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="step-line"></div>
+          <div class="step-num step-num-warning">3</div>
+          <div class="step-body">
+            <div class="step-body-title">Napisz i skompiluj agenta</div>
+            <div class="step-body-desc">Nowy serwis, ~500 linii. Cross-kompilacja na ARM zajmuje sekundy.</div>
+            <div class="step-code">GOOS=linux GOARCH=arm GOARM=7 go build -o agent-arm ./cmd/agent
+# RPi Zero 2W: GOARCH=arm64
+GOOS=linux GOARCH=arm64 go build -o agent-arm64 ./cmd/agent</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="step-num step-num-purple">4</div>
+          <div class="step-body">
+            <div class="step-body-title">Deploy na obiektach stopniowy (canary)</div>
+            <div class="step-body-desc">Zaczyna od 1 obiektu pilotażowego. System działa przez cały czas — Wariant A cały czas zbiera dane. Agent jest addytywny, nie zastępuje probe.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const t = document.querySelector('[data-theme-toggle]');
+  const r = document.documentElement;
+  let d = r.getAttribute('data-theme') || 'dark';
+  function updateIcon() {
+    t.innerHTML = d === 'dark'
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
+  updateIcon();
+  t.addEventListener('click', () => {
+    d = d === 'dark' ? 'light' : 'dark';
+    r.setAttribute('data-theme', d);
+    updateIcon();
+  });
+})();
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>
