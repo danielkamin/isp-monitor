@@ -1,26 +1,29 @@
-# ── ETAP 1: Builder ──────────────────────────────────────────
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
-WORKDIR /app
+WORKDIR /workspace
 
+COPY go.work go.work.sum ./
 COPY go.mod go.sum ./
-RUN go mod download && go mod verify
+COPY services/probe-service/go.mod     services/probe-service/go.sum     ./services/probe-service/
+COPY services/analytics-service/go.mod services/analytics-service/go.sum ./services/analytics-service/
+COPY services/api-service/go.mod       services/api-service/go.sum       ./services/api-service/
 
-COPY . .
+RUN go mod download
+
+COPY pkg/ ./pkg/
+COPY services/analytics-service/ ./services/analytics-service/
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
-    -ldflags="-w -s -X main.version=$(git describe --tags --always)" \
-    -o /bin/probe-service \
-    ./cmd/probe-service
+    -ldflags="-w -s" \
+    -o /bin/analytics-service \
+    ./services/analytics-service/cmd/analytics-service
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY --from=builder /bin/probe-service /probe-service
+COPY --from=builder /bin/analytics-service /analytics-service
 
-COPY --from=builder /app/db/migrations /migrations
-
-EXPOSE 50051
+EXPOSE 50052
 
 USER nonroot:nonroot
 ENTRYPOINT ["/analytics-service"]

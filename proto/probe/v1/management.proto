@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package probe.v1;
+
+option go_package = "github.com/danielkamin/isp-monitor/pkg/pb/probe/v1;probev1";
+
+
+service ManagementService {
+    rpc CreateSite (CreateSiteRequest) returns (CreateSiteResponse);
+    rpc CreateTarget (CreateTargetRequest) returns (CreateTargetResponse);
+    rpc ListActiveSites(ListActiveSitesRequest)  returns (ListActiveSitesResponse);
+    rpc ListActiveTargets(ListActiveTargetsRequest)  returns (ListActiveTargetsResponse);
+}
+
+message ListActiveSitesRequest {}
+message Site {
+    string id = 1;
+    string name = 2;
+    string isp_name = 3;
+    int64 isp_asn = 4;
+    bool active = 5;
+}
+message CreateSiteResponse {
+    Site site = 1;
+}
+message CreateSiteRequest {
+    string name     = 1;
+    string isp_name = 2;
+    int64  isp_asn  = 3;
+}
+message ListActiveSitesResponse {
+    repeated Site sites = 1;
+}
+
+message ListActiveTargetsRequest {}
+message Target {
+    string id =     1;
+    string site_id =2;
+    string name =   3;
+    string type =   4;
+    string ip  =    5;
+    int32 port  =   6;
+    string protocol = 7;
+    bool active =    8;
+}
+message CreateTargetResponse {
+    Target target = 1;
+}
+message CreateTargetRequest {
+    string site_id  = 1;
+    string name     = 2;
+    string type     = 3;
+    string ip       = 4;
+    int32  port     = 5;
+    string protocol = 6;
+}
+message ListActiveTargetsResponse {
+    repeated Target targets = 1;
+}

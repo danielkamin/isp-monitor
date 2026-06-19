@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package probe.v1;
+
+option go_package = "github.com/danielkamin/isp-monitor/pkg/pb/probe/v1;probev1";
+
+service ResultsService {
+  rpc StreamResults(StreamResultsRequest) returns (stream StreamResultsResponse);
+}
+
+message StreamResultsRequest {
+  optional string site_id = 1;
+}
+
+message StreamResultsResponse {
+  string target_id   = 1;
+  string site_id     = 2;
+  bool   success     = 3;
+  int32  latency_ms  = 4;
+  double packet_loss = 5;
+  string error_msg   = 6;
+  int64  probed_at   = 7; // Unix timestamp ms
+}

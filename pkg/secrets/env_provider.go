@@ -10,7 +10,7 @@ import (
 type EnvProvider struct{}
 
 func NewEnvProvider(path string) (*EnvProvider, error) {
-	if err := godotenv.Load(path); err != nil {
+	if err := godotenv.Load(path); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 	return &EnvProvider{}, nil
@@ -20,7 +20,7 @@ func NewEnvProvider(path string) (*EnvProvider, error) {
 func (p *EnvProvider) Get(key string) (string, error) {
 	val := os.Getenv(key)
 	if val == "" {
-		return "", fmt.Errorf("secret %q, fwas not found in env", key)
+		return "", fmt.Errorf("Secret %q, was not found in env", key)
 	}
 	return val, nil
 }

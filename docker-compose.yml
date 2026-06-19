@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: isp-monitor
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: dev_password
+    volumes:
+      - ./deployments/postgres:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d isp-monitor"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  probe-service:
+    build:
+      context: .
+      dockerfile: ./deployments/docker/probe-service.Dockerfile
+    env_file: ./services/probe-service/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "50051:50051"
+
+  analytics-service:
+    build:
+      context: .
+      dockerfile: ./deployments/docker/analytics-service.Dockerfile
+    env_file: ./services/analytics-service/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "50052:50052"
+
+  api-service:
+    build:
+      context: .
+      dockerfile: ./deployments/docker/api-service.Dockerfile
+    env_file: ./services/api-service/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "50053:50053"
+
+volumes:
+  postgres_data:

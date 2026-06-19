@@ -3,3 +3,115 @@ version: '3'
 dotenv:
   - .env.local
   - .env
+
+tasks:
+  # ── Dev environment ────────────────────────────────────────────
+  dev:up:
+    desc: Start all services in background
+    cmds:
+      - docker compose up -d
+
+  dev:down:
+    desc: Stop all services, keep database volume
+    cmds:
+      - docker compose down
+
+  dev:reset:
+    desc: Wipe database and restart everything
+    cmds:
+      - docker compose down -v
+      - docker compose up -d
+
+  dev:build:
+    desc: Rebuild all service images
+    cmds:
+      - docker compose build
+
+  dev:logs:
+    desc: Follow logs (usage - task dev:logs -- probe-service)
+    cmds:
+      - docker compose logs -f {{.CLI_ARGS}}
+
+  dev:ps:
+    desc: Show running containers
+    cmds:
+      - docker compose ps
+
+  # ── Database ───────────────────────────────────────────────────
+  db:shell:
+    desc: Open psql shell as admin
+    cmds:
+      - docker compose exec postgres psql -U admin -d isp-monitor
+
+  db:shell:probe:
+    desc: Open psql shell as probe_user
+    cmds:
+      - docker compose exec postgres psql -U probe_user -d isp-monitor
+
+  db:shell:analytics:
+    desc: Open psql shell as analytics_user
+    cmds:
+      - docker compose exec postgres psql -U analytics_user -d isp-monitor
+
+  db:migrate:probe:
+    desc: Apply probe-service SQL schema (runs as admin)
+    cmds:
+      - docker compose exec -T postgres psql -U admin -d isp-monitor < services/probe-service/sql/schema/001_init.sql
+
+  db:migrate:analytics:
+    desc: Apply analytics-service SQL schema (runs as admin)
+    cmds:
+      - docker compose exec -T postgres psql -U admin -d isp-monitor < services/analytics-service/sql/schema/001_init.sql
+
+  # ── sqlc ───────────────────────────────────────────────────────
+  sqlc:probe:
+    desc: Generate sqlc code for probe-service
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}/services/probe-service:/src" -w /src sqlc/sqlc generate
+
+  sqlc:analytics:
+    desc: Generate sqlc code for analytics-service
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}/services/analytics-service:/src" -w /src sqlc/sqlc generate
+
+  # ── Build & Test ───────────────────────────────────────────────
+  build:
+    desc: Build all services
+    cmds:
+      - task: build:probe
+      - task: build:analytics
+      - task: build:api
+
+  build:probe:
+    desc: Build probe-service binary
+    dir: services/probe-service
+    cmds:
+      - go build ./...
+
+  build:analytics:
+    desc: Build analytics-service binary
+    dir: services/analytics-service
+    cmds:
+      - go build ./...
+
+  build:api:
+    desc: Build api-service binary
+    dir: services/api-service
+    cmds:
+      - go build ./...
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  test:probe:
+    desc: Run probe-service tests
+    dir: services/probe-service
+    cmds:
+      - go test ./...
+  # ── Protobuf ───────────────────────────────────────────────
+  proto:generate:
+    desc: Generate Go code from proto files
+    cmds:
+      - buf generate
