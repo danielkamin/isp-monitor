@@ -59,10 +59,11 @@ func (ns NullDeviceType) Value() (driver.Value, error) {
 type ProbeProtocol string
 
 const (
-	ProbeProtocolIcmp  ProbeProtocol = "icmp"
-	ProbeProtocolTcp   ProbeProtocol = "tcp"
-	ProbeProtocolHttp  ProbeProtocol = "http"
-	ProbeProtocolHttps ProbeProtocol = "https"
+	ProbeProtocolIcmp       ProbeProtocol = "icmp"
+	ProbeProtocolTcp        ProbeProtocol = "tcp"
+	ProbeProtocolTraceroute ProbeProtocol = "traceroute"
+	ProbeProtocolMtr        ProbeProtocol = "mtr"
+	ProbeProtocolHttp       ProbeProtocol = "http"
 )
 
 func (e *ProbeProtocol) Scan(src interface{}) error {

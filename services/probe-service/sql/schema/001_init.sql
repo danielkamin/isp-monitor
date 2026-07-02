@@ -1,7 +1,7 @@
 SET search_path TO probe;
 
 CREATE TYPE device_type AS ENUM ('router', 'dvr', 'alarm', 'generic');
-CREATE TYPE probe_protocol AS ENUM ('icmp', 'tcp', 'http', 'https');
+CREATE TYPE probe_protocol AS ENUM ('icmp', 'tcp', 'traceroute', 'mtr', 'http');
 
 CREATE TABLE IF NOT EXISTS sites (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
