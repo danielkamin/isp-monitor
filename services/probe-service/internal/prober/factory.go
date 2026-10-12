@@ -17,7 +17,7 @@ func New(protocol db.ProbeProtocol) (Prober, error) {
 	case db.ProbeProtocolTraceroute:
 		return &TracerouteProber{}, nil
 	case db.ProbeProtocolHttp:
-		return &TcpProber{}, nil
+		return &HttpProber{}, nil
 	default:
 		return nil, fmt.Errorf("Unknown protocol: %s", protocol)
 	}

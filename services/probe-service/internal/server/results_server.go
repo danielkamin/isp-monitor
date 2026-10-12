@@ -1,6 +1,8 @@
 package server
 
 import (
+	"log/slog"
+
 	pb "github.com/danielkamin/isp-monitor/pkg/pb/probe/v1"
 	uuid "github.com/google/uuid"
 )
@@ -8,6 +10,7 @@ import (
 type ResultsServer struct {
 	pb.UnimplementedResultsServiceServer
 	broadcaster *Broadcaster
+	logger      *slog.Logger
 }
 
 func (rs *ResultsServer) StreamResults(req *pb.StreamResultsRequest, stream pb.ResultsService_StreamResultsServer) error {
@@ -21,6 +24,7 @@ func (rs *ResultsServer) StreamResults(req *pb.StreamResultsRequest, stream pb.R
 				continue
 			}
 			if err := stream.Send(msg); err != nil {
+				rs.logger.Error("Error sending stream", slog.Any("err", err))
 				return err
 			}
 		case <-stream.Context().Done():
@@ -29,7 +33,7 @@ func (rs *ResultsServer) StreamResults(req *pb.StreamResultsRequest, stream pb.R
 	}
 }
 
-func NewResultsServer(broadcaster *Broadcaster) *ResultsServer {
-	s := &ResultsServer{broadcaster: broadcaster}
+func NewResultsServer(broadcaster *Broadcaster, logger *slog.Logger) *ResultsServer {
+	s := &ResultsServer{broadcaster: broadcaster, logger: logger}
 	return s
 }

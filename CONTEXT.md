@@ -4,7 +4,7 @@
 
 System monitorujący połączenia internetowe — pinguje lub sprawdza w inny sposób adresy/miejsca sieciowe, zapisuje wyniki, a następnie generuje raporty (failure rate per ISP, per lokalizacja). Projekt jest przede wszystkim środowiskiem nauki, a nie systemem produkcyjnym.
 
-**Technologie do ćwiczenia:** Go, sqlc, protokoły internetowe (ICMP/ping, HTTP, DNS), Docker, mikroserwisy, gRPC, PostgreSQL.
+**Technologie do ćwiczenia:** Go, sqlc, protokoły internetowe (ICMP/ping, TCP, HTTP, traceroute, MTR), Docker, mikroserwisy, gRPC, PostgreSQL, Prometheus, Loki, Grafana.
 
 ---
 
@@ -20,13 +20,16 @@ isp-monitor/
 ├── pkg/
 │   ├── config/                      # helpers: LoadString, LoadStringOrDefault
 │   └── secrets/                     # Provider interface + EnvProvider + AWSProvider (stub)
+├── proto/
+│   └── probe/v1/results.proto       # gRPC kontrakt probe-service
 ├── services/
 │   ├── probe-service/               # module: github.com/danielkamin/probe-service
 │   ├── analytics-service/           # module: github.com/danielkamin/analytics-service
 │   └── api-service/                 # module: github.com/danielkamin/api-service
 ├── deployments/
 │   ├── docker/                      # Dockerfile per serwis
-│   └── postgres/                    # init scripts (schematy, role, granty)
+│   ├── postgres/                    # init scripts (schematy, role, granty)
+│   └── monitoring/                  # konfiguracje Prometheus, Loki, Grafana, Promtail
 ├── docker-compose.yml
 └── Taskfile.yml
 ```
@@ -35,11 +38,9 @@ isp-monitor/
 
 | Serwis | Port | DB user | Rola |
 |---|---|---|---|
-| probe-service | gRPC :50051 | probe_user | wykonuje pomiary, zapisuje wyniki |
-| analytics-service | gRPC :50052 | analytics_user | agreguje dane, liczy statystyki |
+| probe-service | gRPC :50051 | probe_user | wykonuje pomiary, zapisuje wyniki, streamuje do analytics |
+| analytics-service | gRPC :50052 | analytics_user | agreguje dane, liczy statystyki, tworzy incydenty |
 | api-service | HTTP :8080 | api_user (read-only) | serwuje dane do klientów |
-
-`storage-service` — zdecydowano że jest zbędny bez zdalnych agentów RPi. Może być zastąpiony `alert-service` lub `scheduler-service` w przyszłości.
 
 ---
 
@@ -47,7 +48,7 @@ isp-monitor/
 
 ### Strategia: schema-per-service w jednej instancji PostgreSQL 17
 
-Każdy serwis ma własny schemat i usera z uprawnieniami tylko do swojego schematu. `api_user` ma `SELECT` na schematach `probe` i `analytics`.
+Każdy serwis ma własny schemat i usera z uprawnieniami tylko do swojego schematu.
 
 ```
 schematy: probe | analytics | api
@@ -57,37 +58,53 @@ Init scripts uruchamiane automatycznie przy pierwszym `docker compose up`:
 - `deployments/postgres/01_schemas.sql` — CREATE SCHEMA
 - `deployments/postgres/02_roles.sql` — CREATE USER + GRANT + ALTER DEFAULT PRIVILEGES
 
-**Kluczowe:** `ALTER DEFAULT PRIVILEGES FOR ROLE probe_user IN SCHEMA probe GRANT SELECT ON TABLES TO api_user` — bez tego `api_user` nie widzi tabel tworzonych przez `probe_user`.
+**Uprawnienia cross-schema:**
+- `api_user` — SELECT na `probe` i `analytics`
+- `analytics_user` — SELECT na `probe` (żeby joinować sites/targets/isp_providers bez duplikowania danych)
+- `ALTER DEFAULT PRIVILEGES FOR ROLE probe_user IN SCHEMA probe GRANT SELECT ON TABLES TO analytics_user` — konieczne żeby analytics_user widział nowe tabele probe tworzone przez probe_user
 
-### Tabele serwisów
-
-Migracje tabel (bez goose — nie potrzeba na tym etapie) trzymane w `services/*/sql/schema/`. Uruchamiane ręcznie przez:
-```
-task db:migrate:probe
-```
-
-Pliki używają `CREATE TABLE IF NOT EXISTS` — bezpieczne do wielokrotnego uruchamiania.
-
-### probe-service schema (obecny stan)
+### probe schema — obecny stan
 
 ```sql
-probe.sites    — lokalizacje/miejsca do monitorowania (IP, ISP, ASN)
-probe.probes   — wyniki pomiarów (latency_ms, packet_loss, success) z FK do sites
+probe.isp_providers  — dostawcy internetu (id, name, asn, country)
+probe.sites          — lokalizacje (id, name, isp_provider_id FK, active)
+probe.targets        — co probować (id, site_id, ip, port, protocol, active)
+probe.probes         — wyniki pomiarów (id, target_id, latency_ms, packet_loss, success, error_msg, created_at)
 ```
 
+`probe_protocol` enum: `icmp | tcp | traceroute | mtr | http`
+
+Migracje tabel w `services/*/sql/schema/`, uruchamiane ręcznie: `task db:migrate:probe`
+
 DSN z `search_path=probe` — zapytania bez prefiksu schematu.
+
+---
+
+## Monitoring stack
+
+Serwisy w `docker-compose.yml`, konfiguracje w `deployments/monitoring/`:
+
+| Serwis | Port | Rola |
+|---|---|---|
+| Prometheus | :9090 | zbiera metryki (scrape) |
+| Loki | :3100 | agreguje logi |
+| Grafana | :3000 | dashboardy (admin/admin) |
+| Promtail | — | czyta docker stdout → wysyła do Loki |
+
+Promtail automatycznie dodaje label `container=<nazwa>` do logów — bez zmian w kodzie Go.
+
+**Logowanie w serwisach:** `log/slog` z `JSONHandler` (stdout → Promtail → Loki). Logger tworzony w `main.go`, przekazywany przez DI do konstruktorów. Per-komponent kontekst przez `logger.With("component", "scheduler")`.
 
 ---
 
 ## sqlc
 
 Konfiguracja w `services/probe-service/sqlc.yaml`:
-- engine: postgresql
-- sql_package: pgx/v5
+- engine: postgresql, sql_package: pgx/v5
 - queries: `sql/queries/` → generuje do `internal/db/queries/`
-- schema: `sql/schema/` (te same pliki co migracje)
+- schema: `sql/schema/`
 
-Generowanie: `task sqlc:probe` (używa lokalnego `sqlc generate`, nie Docker — sqlc zainstalowany z `CGO_ENABLED=0`).
+Generowanie: `task sqlc:probe`
 
 ---
 
@@ -96,32 +113,16 @@ Generowanie: `task sqlc:probe` (używa lokalnego `sqlc generate`, nie Docker —
 ### Sekrety / konfiguracja
 
 `pkg/secrets.Provider` interface z `Get(key string) (string, error)`. Factory (`secrets.New()`) wybiera provider na podstawie `APP_ENV`:
-- `development` → `EnvProvider` (ładuje `.env` plik, nie failuje gdy brak pliku)
+- `development` → `EnvProvider` (ładuje `.env` plik)
 - `production` → `AWSProvider` (stub, do zaimplementowania)
-
-Każdy serwis ma swój `internal/config/config.go` z typed `Config` struct ładowanym przez `config.Load(provider)`. Paczka `pkg/config` to tylko helpery (`LoadString`, `LoadStringOrDefault`).
 
 ### Połączenie DB
 
-`internal/db/connect.go` — funkcja `Connect(ctx, config.DBConfig) (*pgxpool.Pool, error)` z pgxpool. Przyjmuje `DBConfig` (nie cały `Config`) — db package nie powinien znać konfiguracji gRPC.
-
-### Per-serwis `.env`
-
-Każdy serwis ma `services/*/  .env` (z `.env.example`). W `docker-compose.yml` `env_file:` wskazuje na plik serwisu. `DB_HOST=postgres` — Docker DNS resolwuje nazwę serwisu compose.
+`internal/db/connect.go` — `Connect(ctx, config.DBConfig) (*pgxpool.Pool, error)`. Przyjmuje `DBConfig` (nie cały `Config`).
 
 ### Docker build
 
-Build context to root repozytorium (`.`) — konieczne ze względu na go.work i `pkg/` współdzielone między serwisami. Dockerfile kopiuje selektywnie:
-```dockerfile
-COPY go.work go.work.sum ./
-COPY go.mod go.sum ./
-COPY services/probe-service/go.mod services/probe-service/go.sum ./services/probe-service/
-RUN go mod download
-COPY pkg/ ./pkg/
-COPY services/probe-service/ ./services/probe-service/
-```
-
-Obraz bazowy: `gcr.io/distroless/static-debian12:nonroot` (minimalistyczny, bez shella).
+Build context to root repozytorium — konieczne ze względu na `go.work` i `pkg/`. Obraz bazowy: `gcr.io/distroless/static-debian12:nonroot`.
 
 ---
 
@@ -140,12 +141,19 @@ task build:probe         # go build
 
 ---
 
+## Co zrobione
+
+- [x] Monorepo: go.work, pkg/secrets, pkg/config, Dockerfiles, docker-compose
+- [x] PostgreSQL: schematy, role, granty (w tym cross-schema dla analytics_user i api_user)
+- [x] Monitoring stack: Prometheus, Loki, Grafana, Promtail w docker-compose + pliki config
+- [x] probe-service: scheduler, broadcaster, gRPC ResultsServer, sqlc queries, prober interface
+- [x] probe schema: isp_providers, sites, targets, probes + probe_protocol enum
+
 ## Co jeszcze nie jest zrobione
 
-- [ ] Implementacja logiki probingowej w probe-service (ICMP ping, HTTP check, DNS check)
-- [ ] gRPC server w probe-service
-- [ ] analytics-service — schemat i logika agregacji
-- [ ] api-service — HTTP server (prawdopodobnie Chi lub stdlib)
+- [ ] probe-service: implementacja proberów (icmp, tcp, http, traceroute, mtr), wire main.go, ProbeResult struct
+- [ ] analytics-service: schema DB, logika agregacji, obsługa incydentów, klient gRPC probe-service
+- [ ] api-service: HTTP server (Chi lub stdlib), endpointy raportów
 - [ ] AWSProvider w pkg/secrets
+- [ ] Prometheus metryki w serwisach Go (`/metrics` endpoint)
 - [ ] Raporty failure rate per ISP (główny cel analityczny)
-- [ ] Prawdopodobnie: alert-service lub scheduler-service jako czwarty serwis

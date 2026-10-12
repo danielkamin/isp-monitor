@@ -110,6 +110,11 @@ tasks:
     dir: services/probe-service
     cmds:
       - go test ./...
+
+  test:probe:linux:
+    desc: Run probe-service tests in Linux with raw ICMP (ping/traceroute/mtr tests skip on Windows). Usage - task test:probe:linux -- -short
+    cmds:
+      - docker run --rm --cap-add=NET_RAW --sysctl net.ipv4.ping_group_range="0 2147483647" -v "{{.ROOT_DIR}}:/src" -w /src/services/probe-service golang:1.26 go test ./... {{.CLI_ARGS}}
   # ── Protobuf ───────────────────────────────────────────────
   proto:generate:
     desc: Generate Go code from proto files

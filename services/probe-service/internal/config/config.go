@@ -24,9 +24,13 @@ type GrpcConfig struct {
 	Port        string
 	TargetHosts []string
 }
+type ProbeConfig struct {
+	ProbeIntervalSeconds int
+}
 type Config struct {
 	Database DBConfig
 	GRPC     GrpcConfig
+	Probe    ProbeConfig
 }
 
 func Load(p secrets.Provider) (*Config, error) {
@@ -75,11 +79,15 @@ func Load(p secrets.Provider) (*Config, error) {
 		grpcTargetHosts = strings.Split(hosts, ",")
 	}
 
+	probeIntervalSecondsConfig, _ := strconv.Atoi(sharedConfig.LoadStringOrDefault(p, "PROBE_INTERVAL_SECONDS", "120"))
 	return &Config{
 		Database: dbConfig,
 		GRPC: GrpcConfig{
 			Port:        grpcPort,
 			TargetHosts: grpcTargetHosts,
+		},
+		Probe: ProbeConfig{
+			ProbeIntervalSeconds: probeIntervalSecondsConfig,
 		},
 	}, nil
 }

@@ -1,7 +1,7 @@
 package server
 
 import (
-	"log"
+	"log/slog"
 	"sync"
 
 	pb "github.com/danielkamin/isp-monitor/pkg/pb/probe/v1"
@@ -10,6 +10,7 @@ import (
 type Broadcaster struct {
 	mu          sync.RWMutex
 	subscribers map[string]chan *pb.StreamResultsResponse
+	logger      *slog.Logger
 }
 
 func (b *Broadcaster) Publish(r *pb.StreamResultsResponse) {
@@ -19,7 +20,7 @@ func (b *Broadcaster) Publish(r *pb.StreamResultsResponse) {
 		select {
 		case ch <- r:
 		default:
-			log.Print("dropping publishing")
+			b.logger.Info("dropping publishing")
 		}
 	}
 }
@@ -34,10 +35,10 @@ func (b *Broadcaster) Subscribe(id string) chan *pb.StreamResultsResponse {
 func (b *Broadcaster) Unsubscribe(id string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.subscribers[id] = nil
+	delete(b.subscribers, id)
 }
 
-func NewBroadcaster() *Broadcaster {
-	b := &Broadcaster{subscribers: make(map[string]chan *pb.StreamResultsResponse)}
+func NewBroadcaster(logger *slog.Logger) *Broadcaster {
+	b := &Broadcaster{subscribers: make(map[string]chan *pb.StreamResultsResponse), logger: logger}
 	return b
 }
